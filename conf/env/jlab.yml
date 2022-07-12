@@ -1,0 +1,11 @@
+name: nb-2022-sgc-ani
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - jupyterlab
+  - pandas>=1.4.2
+  - seaborn>=0.11.2
+  - scikit-learn
+  - scipy
