@@ -21,7 +21,7 @@ for subset in SUBSETS:
     genomeD[subset] = genome_list
 
 rule all:
-    input: expand(f"{out_dir}/{{subset}}.ani.csv.gz", subset=SUBSETS)
+    input: expand(f"{out_dir}/{{subset}}.ani.csv", subset=SUBSETS)
 
 rule sourmash_ANI:
     input: 
@@ -39,22 +39,21 @@ rule sourmash_ANI:
         # could use compare, but prefetch gives more info  (contain, jaccard, ANI all at once)
 # then plot?
 
-rule aggregate_ANI_by_subset:
+rule write_prefetch_filelist:
     input: lambda w: expand(f"{out_dir}/{w.subset}/{{genome}}.prefetch.csv", genome=genomeD[w.subset])
-    output: f"{out_dir}/{{subset}}.ani.csv.gz"
+    output: f"{out_dir}/{{subset}}.prefetch.filelist"
     run:
-        # aggregate all prefetch csvs --> single csv
-        def is_non_zero_file(fpath):  
-            return os.path.isfile(fpath) and os.path.getsize(fpath) > 0
-        df_list = []
-        for inF in input:
-            if is_non_zero_file(str(inF)):
-                df = pd.read_csv(str(inF), sep=',')
-                df_list.append(df)
-        #aggDF= pd.concat([pd.read_csv(str(x), sep=",") for x in input])
-        aggDF = pd.concat(df_list)
-        aggDF.to_csv(str(output), index=False)
-           
+        with open(str(output), 'w') as outF:
+            for inF in input:
+                fn = os.path.abspath(str(inF))
+                outF.write(f"{fn}\n")
 
-       # alt way: files = list(filter(lambda file: os.stat(file).st_size > 0, files))
 
+rule aggregate_ANI_by_subset:
+    input: f"{out_dir}/{{subset}}.prefetch.filelist",
+    output: f"{out_dir}/{{subset}}.ani.csv"
+    conda: "conf/env/sourmash4.4.1.yml"
+    shell:
+        """
+        python recalc-ani.py --from-file {input} -o {output} 
+        """
