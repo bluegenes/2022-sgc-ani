@@ -11,8 +11,8 @@ import pandas as pd
 out_dir = config.get("output_dir", "output.sgc_ani")
 logs_dir = os.path.join(out_dir, "logs")
 
-sgc_dir = "/home/ctbrown/2020-hu-rerun"
-SUBSETS = ["denticola", "gingivalis", "bacteriodes"]
+sgc_dir = "/home/ctbrown/2020-rerun-hu"
+SUBSETS = ["denticola", "gingivalis", "bacteroides"]
 
 # read genome lists
 genomeD = {}
@@ -28,23 +28,33 @@ rule sourmash_ANI:
        ref_genome=f"{sgc_dir}/{{subset}}/{{genome}}.sig",
        sgc_unitigs=f"{sgc_dir}/podarV_k31_r1_search_oh0_{{subset}}/{{genome}}.contigs.sig",
     output:
-       prefetch=f"{out_dir}/{{subset}}/{{genome}}.contigs.sig"
+        f"{out_dir}/{{subset}}/{{genome}}.prefetch.csv"
     log: f"{logs_dir}/{{subset}}/{{genome}}.prefetch.log"
     benchmark: f"{logs_dir}/{{subset}}/{{genome}}.prefetch.benchmark"
     conda: "conf/env/sourmash4.4.1.yml"
     shell:
         """
-        sourmash prefetch {input.ref_genome} {input.sgc_unitigs} -o {output} 2> {log}
+        sourmash prefetch --threshold-bp 0 {input.ref_genome} {input.sgc_unitigs} -o {output} 2> {log}
         """
         # could use compare, but prefetch gives more info  (contain, jaccard, ANI all at once)
 # then plot?
 
 rule aggregate_ANI_by_subset:
-    input: lambda w: expand(f"{out_dir}/{{subset}}/{{genome}}.contigs.sig", subset = w.subset, genome=genomeD[w.subset])
+    input: lambda w: expand(f"{out_dir}/{w.subset}/{{genome}}.prefetch.csv", genome=genomeD[w.subset])
     output: f"{out_dir}/{{subset}}.ani.csv.gz"
     run:
-        # aggreate all prefetch csvs --> single csv
-        aggDF = pd.concat([pd.read_csv(str(x), sep=",") for x in input])
+        # aggregate all prefetch csvs --> single csv
+        def is_non_zero_file(fpath):  
+            return os.path.isfile(fpath) and os.path.getsize(fpath) > 0
+        df_list = []
+        for inF in input:
+            if is_non_zero_file(str(inF)):
+                df = pd.read_csv(str(inF), sep=',')
+                df_list.append(df)
+        #aggDF= pd.concat([pd.read_csv(str(x), sep=",") for x in input])
+        aggDF = pd.concat(df_list)
         aggDF.to_csv(str(output), index=False)
-            
+           
+
+       # alt way: files = list(filter(lambda file: os.stat(file).st_size > 0, files))
 
